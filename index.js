@@ -1,9 +1,9 @@
 require('dotenv').config();
-
 const { Client, GatewayIntentBits, SlashCommandBuilder, Routes, REST, AttachmentBuilder } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 
+// 環境変数から読み込み
 const TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const GUILD_ID = process.env.DISCORD_GUILD_ID;
@@ -39,8 +39,7 @@ client.once('ready', () => {
 });
 
 client.on('interactionCreate', async interaction => {
-  if (!interaction.isChatInputCommand()) return;
-  if (interaction.commandName !== 'server') return;
+  if (!interaction.isChatInputCommand() || interaction.commandName !== 'server') return;
 
   await interaction.deferReply();
 
@@ -57,7 +56,15 @@ client.on('interactionCreate', async interaction => {
     csvRows.push(headers);
 
     members.forEach(member => {
-      const joinedAt = member.joinedAt ? member.joinedAt.toISOString() : '';
+      // ▼ 加入日を YYYY/MM/DD 形式に整形
+      const joinedAt = member.joinedAt
+        ? new Date(member.joinedAt).toLocaleDateString('ja-JP', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+          })
+        : '';
+
       const displayName = member.displayName;
       const username = member.user.username;
       const userId = member.id;
@@ -65,6 +72,7 @@ client.on('interactionCreate', async interaction => {
       const roleValues = roles.map(role =>
         member.roles.cache.has(role.id) ? role.name : ''
       );
+
       csvRows.push([joinedAt, displayName, username, userId, nickname, ...roleValues]);
     });
 
@@ -72,7 +80,14 @@ client.on('interactionCreate', async interaction => {
       row.map(field => `"${String(field).replace(/"/g, '""')}"`).join(',')
     ).join('\n');
 
-    const filePath = path.join(__dirname, 'members.csv');
+    // ▼ 日付付きファイル名：members_YYYYMMDD.csv
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    const fileName = `members_${y}${m}${d}.csv`;
+
+    const filePath = path.join(__dirname, fileName);
     fs.writeFileSync(filePath, csvContent, 'utf8');
 
     const attachment = new AttachmentBuilder(filePath);
@@ -81,7 +96,7 @@ client.on('interactionCreate', async interaction => {
       files: [attachment]
     });
 
-    fs.unlinkSync(filePath); // 一時ファイルを削除
+    fs.unlinkSync(filePath); // 一時ファイル削除
   } catch (err) {
     console.error('❌ エラー:', err);
     await interaction.editReply('⚠️ エクスポート中にエラーが発生しました。');
